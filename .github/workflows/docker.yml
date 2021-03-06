@@ -1,0 +1,52 @@
+name: Docker build and push
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - v*
+
+env:
+  IMAGE_NAME: monero
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: ghcr.io login
+        uses: docker/login-action@v1.8.0
+        with:
+          registry: ghcr.io
+          username: "${{ github.actor }}"
+          password: "${{ secrets.GITHUB_TOKEN }}"
+          
+      - name: DockerHub login
+        uses: docker/login-action@v1.8.0
+        with:
+          username: "${{ secrets.DH_USERNAME }}"
+          password: "${{ secrets.DH_PASSWORD }}"
+
+      - name: Build image
+        run: docker build . --file Dockerfile --tag $IMAGE_NAME
+
+      - name: Push image
+        run: |
+          IMAGE_ID=ghcr.io/${{ github.repository }}/$IMAGE_NAME
+          IMAGE_ID=$(echo $IMAGE_ID | tr '[A-Z]' '[a-z]')
+
+          VERSION=$(echo "${{ github.ref }}" | sed -e 's,.*/\(.*\),\1,')
+          [[ "${{ github.ref }}" == "refs/tags/"* ]] && VERSION=$(echo $VERSION | sed -e 's/^v//')
+          [ "$VERSION" == "master" ] && VERSION=latest
+
+          echo IMAGE_ID=$IMAGE_ID
+          echo VERSION=$VERSION
+
+          docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
+          docker tag $IMAGE_NAME marcobuster/$IMAGE_NAME:$VERSION
+          docker push $IMAGE_ID:$VERSION
+          docker push marcobuster/$IMAGE_NAME:$VERSION
